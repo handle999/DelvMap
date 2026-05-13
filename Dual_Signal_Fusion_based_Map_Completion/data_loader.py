@@ -1,6 +1,7 @@
 import torch.utils.data as data
 import numpy as np
 import os
+import json
 import torchvision.transforms as transforms
 import cv2
 
@@ -15,36 +16,58 @@ def load_img(path, grayscale=False):
 
 
 def get_data_loader_multistage(root_dir, mode):
-    if mode == 'train':
-        dl = data.DataLoader(MultistageDataset(os.path.join(root_dir, mode)), shuffle=True, batch_size=1)
-    else:
-        dl = data.DataLoader(MultistageDataset(os.path.join(root_dir, mode)), shuffle=True, batch_size=1)
+    """
+    Load dataset with train/val/test split support via split_indices.json
+    mode: 'train', 'val', 'test'
+    """
+    dl = data.DataLoader(MultistageDataset(root_dir, mode), shuffle=(mode == 'train'), batch_size=1)
     return dl
 
 
 class MultistageDataset(data.Dataset):
-    def __init__(self, data_path):
+    def __init__(self, data_path, mode='train'):
+        """
+        data_path: dataset root directory (contains split_indices.json and data subdirs)
+        mode: 'train', 'val', 'test'
+        """
         super(MultistageDataset, self).__init__()
-        # main task
-        self.traj_paths = [os.path.join(data_path, 'traj_and_point_split', filename) for filename in os.listdir(os.path.join(data_path, 'traj_and_point_split'))
-                     if filename.endswith('.npy')]
-        self.label_paths = [os.path.join(data_path, 'label', filename) for filename in os.listdir(os.path.join(data_path, 'label'))
-                       if filename.endswith('.png')]
-        # building task
-        self.src_paths = [os.path.join(data_path, 'src_split', filename) for filename in os.listdir(os.path.join(data_path, 'src_split'))
-                     if filename.endswith('.png')]
-        self.building_label_paths = [os.path.join(data_path, 'building_label', filename) for filename in os.listdir(os.path.join(data_path, 'building_label'))
-                     if filename.endswith('.png')]
-        # for test
-        self.image_paths = [os.path.join(data_path, 'traj_and_point_split', filename) for filename in os.listdir(os.path.join(data_path, 'traj_and_point_split'))
-                     if filename.endswith('.npy')]
+        self.data_path = data_path
+        self.mode = mode
+
+        # Read split indices
+        split_file = os.path.join(data_path, 'split_indices.json')
+        if os.path.exists(split_file):
+            with open(split_file, 'r') as f:
+                split_data = json.load(f)
+            self.selected_indices = split_data.get(mode, [])
+            print(f"[{mode}] Loaded {len(self.selected_indices)} samples from split_indices.json")
+        else:
+            # Fallback to subdirectory mode
+            data_path = os.path.join(data_path, mode)
+            self.selected_indices = None
+            print(f"[{mode}] No split_indices.json found, using subdirectory: {data_path}")
+
+        # Get data directories
+        traj_dir = os.path.join(data_path if self.selected_indices is None else data_path, 'traj_and_point_split')
+
+        # Get all file names (without extension)
+        all_traj_files = sorted([f.replace('.npy', '') for f in os.listdir(traj_dir) if f.endswith('.npy')])
+
+        if self.selected_indices is not None:
+            # Use indices from split_indices.json
+            self.file_indices = [all_traj_files[i] for i in self.selected_indices]
+        else:
+            # Use all files
+            self.file_indices = all_traj_files
 
     def __getitem__(self, index):
-        traj_path = self.traj_paths[index]
-        label_path = self.label_paths[index]
-        src_path = self.src_paths[index]
-        building_label_path = self.building_label_paths[index]
-        img_path = self.image_paths[index]
+        file_idx = self.file_indices[index]
+
+        traj_path = os.path.join(self.data_path, 'traj_and_point_split', f'{file_idx}.npy')
+        label_path = os.path.join(self.data_path, 'label', f'{file_idx}.png')
+        src_path = os.path.join(self.data_path, 'src_split', f'{file_idx}.png')
+        building_label_path = os.path.join(self.data_path, 'building_label', f'{file_idx}.png')
+        img_path = traj_path
 
         traj = np.asarray(np.load(traj_path))
         traj = np.array(traj, dtype="float")
@@ -73,10 +96,8 @@ class MultistageDataset(data.Dataset):
             'src_data': src,
             'building_label_path': building_label_path,
             'building_label_data': building_label,
-
             'img_path': img_path,
-
         }
 
     def __len__(self):
-        return len(self.traj_paths)
+        return len(self.file_indices)

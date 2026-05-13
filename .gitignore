@@ -1,0 +1,25 @@
+# 训练日志
+train_log_GKS/*
+train_log_GKS.zip
+
+# 原始数据
+rawdata/
+
+# 数据制备输出
+dataset/delvmap_data*/
+dataset/delvmap_data_patches*/
+dataset/xian_*/
+
+# 大图图片
+xian-z18-google-delvmap*.png
+traj*.png
+
+# TPTK 工具目录
+adaptive_map_completion/tptk/
+adaptive_map_completion/walkway_completion/
+
+# Python 缓存
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
