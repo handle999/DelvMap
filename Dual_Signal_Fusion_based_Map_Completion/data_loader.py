@@ -15,12 +15,13 @@ def load_img(path, grayscale=False):
     return img
 
 
-def get_data_loader_multistage(root_dir, mode):
+def get_data_loader_multistage(root_dir, mode, batch_size=1):
     """
     Load dataset with train/val/test split support via split_indices.json
     mode: 'train', 'val', 'test'
+    batch_size: batch size for DataLoader
     """
-    dl = data.DataLoader(MultistageDataset(root_dir, mode), shuffle=(mode == 'train'), batch_size=1)
+    dl = data.DataLoader(MultistageDataset(root_dir, mode), shuffle=(mode == 'train'), batch_size=batch_size)
     return dl
 
 
@@ -83,9 +84,9 @@ class MultistageDataset(data.Dataset):
         ])
 
         img = img_transform(np.array(traj, dtype="uint8")).float()
-        label = img_transform(label * 128).float()
+        label = img_transform(label).float()  # ToTensor已自动归一化到0-1
         src = img_transform(np.array(src, dtype="uint8")).float()
-        building_label = img_transform(building_label * 255).float()
+        building_label = img_transform(building_label).float()  # ToTensor已自动归一化到0-1
 
         return {
             'traj_path': traj_path,

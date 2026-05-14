@@ -218,8 +218,8 @@ class DSFNet(nn.Module):
         self.ca_soft_down3 = self.ca_conv_stage(4096, 2)
         self.ca_soft_down4 = self.ca_conv_stage(16384, 2)
 
-        # 用于计算BTFuse输出
-        self.temp = torch.ones((256, 256), device=torch.device("cuda"))
+        # 用于计算BTFuse输出 - 在forward中动态创建以支持CPU/GPU
+        # self.temp = torch.ones((256, 256), device=torch.device("cuda"))
 
         # 用于STFuse关联矩阵增加权重
         self.W_b = nn.Parameter(torch.ones(1024, 1024))
@@ -325,7 +325,9 @@ class DSFNet(nn.Module):
 
         max_channel = torch.max(sb_out1, dim=2, keepdim=True)[0]
         max_channel = torch.max(max_channel, dim=3, keepdim=True)[0] # [1,64,1,1]
-        temp = torch.ones(256, 256).cuda()
+        # 根据sb_out1的设备动态创建temp tensor，支持CPU/GPU
+        # 注意：需要保持[B,1,H,W]维度以与max_channel([B,64,1,1])匹配
+        temp = torch.ones_like(sb_out1[:, :1, :, :])
         btfuse_out = (max_channel * temp - sb_out1) / (max_channel + 1e-8)
 
         tr_conv1_out = self.down1_traj(traj)

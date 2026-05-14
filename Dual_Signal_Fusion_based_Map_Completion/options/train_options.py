@@ -24,6 +24,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--save_by_iter', action='store_true', help='whether saves model by iteration')
         parser.add_argument('--continue_train', action='store_true', help='continue training: load the latest model')
         parser.add_argument('--epoch_count', type=int, default=1, help='the starting epoch count, we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>, ...')
+        parser.add_argument('--max_keep_checkpoints', type=int, default=5, help='maximum number of checkpoints to keep (FIFO cleanup)')
         # training parameters
         parser.add_argument('--n_epochs', type=int, default=200, help='number of epochs of training')
         parser.add_argument('--sample_interval', type=int, default=50, help='validation interval')
