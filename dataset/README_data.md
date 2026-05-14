@@ -102,6 +102,7 @@ DelvMap/
 ### 3.1 脚本功能
 
 从原始数据生成 `create_dataset.py` 需要的完整大图：
+注意：这里必须是 EPSG:3857 墨卡托投影！如果用 WGS84 会对应不上！
 
 - 从 OSM PBF 提取 **道路** (`highway=*`)
 - 从 OSM PBF 提取 **建筑** (`building=*`)
@@ -208,7 +209,7 @@ python dataset/create_dataset.py -i dataset/delvmap_data -m sliding
 python dataset/create_dataset.py -i dataset/delvmap_data -m sliding --stride 128
 
 # 指定输出目录
-python dataset/create_dataset.py -i dataset/delvmap_data -o my_patches -m sliding --stride 128
+python dataset/create_dataset.py -i ./dataset/delvmap_data_19 -o ./dataset/xian_2019_delvmap -m sliding --stride 128
 ```
 
 ---

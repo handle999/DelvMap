@@ -36,26 +36,51 @@ CONFIG = {
     'img_h': 6610,
 
     # OSM PBF 文件
-    'osm_pbf': r"e:\School\2025\20250311Road\GraphBased\DelvMap\dataset\osm\xian-plus-260506-full.osm.pbf",
+    'osm_pbf': r"e:\School\2025\20250311Road\GraphBased\DelvMap\dataset\osm\xian-plus-190101-multi.osm.pbf",
 
     # 道路宽度 (像素)
     'road_width': 2,
 
     # 路径
     'rawdata_dir': r"e:\School\2025\20250311Road\GraphBased\DelvMap\rawdata",
-    'output_dir': r"e:\School\2025\20250311Road\GraphBased\DelvMap\dataset\delvmap_data",
+    'output_dir': r"e:\School\2025\20250311Road\GraphBased\DelvMap\dataset\delvmap_data_1919",
 }
 
 
 # ==========================================
 # 工具函数
 # ==========================================
+# def geo_to_pixel(lat, lon, img_w, img_h, config):
+#     """地理坐标 -> 像素坐标"""
+#     x = int((lon - config['lon_min']) / (config['lon_max'] - config['lon_min']) * img_w)
+#     y = int((config['lat_max'] - lat) / (config['lat_max'] - config['lat_min']) * img_h)
+#     # Y轴翻转 (地理坐标向上，图像坐标向下)
+#     y = img_h - 1 - y
+#     return x, y
+import math
+
+def wgs84_to_mercator(lon, lat):
+    """将 WGS84 经纬度转换为 Web Mercator (EPSG:3857) 平面坐标"""
+    x = lon * 20037508.34 / 180.0
+    y = math.log(math.tan((90.0 + lat) * math.pi / 360.0)) / (math.pi / 180.0)
+    y = y * 20037508.34 / 180.0
+    return x, y
+
 def geo_to_pixel(lat, lon, img_w, img_h, config):
-    """地理坐标 -> 像素坐标"""
-    x = int((lon - config['lon_min']) / (config['lon_max'] - config['lon_min']) * img_w)
-    y = int((config['lat_max'] - lat) / (config['lat_max'] - config['lat_min']) * img_h)
-    # Y轴翻转 (地理坐标向上，图像坐标向下)
-    y = img_h - 1 - y
+    """(修复版) 墨卡托投影下的坐标 -> 像素坐标"""
+    # 1. 获取图片边界的墨卡托坐标
+    x_min, y_min = wgs84_to_mercator(config['lon_min'], config['lat_min'])
+    x_max, y_max = wgs84_to_mercator(config['lon_max'], config['lat_max'])
+    
+    # 2. 将当前点转为墨卡托坐标
+    x_m, y_m = wgs84_to_mercator(lon, lat)
+    
+    # 3. 在墨卡托平面上进行线性插值计算像素
+    x = int((x_m - x_min) / (x_max - x_min) * img_w)
+    
+    # 注意：墨卡托坐标的 Y 轴是向北增加的，而图像像素的 Y 轴是向南(向下)增加的
+    y = int((y_max - y_m) / (y_max - y_min) * img_h)
+    
     return x, y
 
 
