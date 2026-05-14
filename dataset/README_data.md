@@ -331,3 +331,99 @@ pip install numpy opencv-python tqdm osmium
 ```bash
 conda install -c conda-forge osmium
 ```
+
+---
+
+## 附录二：数据格式与 DataLoader 处理流程
+
+### 1. 数据文件格式
+
+| 数据类型 | 文件格式 | Shape | Dtype | 值范围 | Unique |
+|----------|----------|-------|-------|--------|--------|
+| traj | .npy | (256,256,2) | uint8 | [0,255] | [0,255] |
+| src | .png RGB | (256,256,3) | uint8 | [0,255] | [0,255] |
+| label | .png gray | (256,256) | uint8 | [0,255] | [0,255] |
+| building | .png gray | (256,256) | uint8 | [0,255] | [0,255] |
+
+### 2. DataLoader 处理流程 (data_loader.py)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              输入: 原始文件                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  traj/*.npy      → np.load() → uint8 [0,255]                               │
+│  src/*.png       → cv2.imread() → uint8 [0,255]                            │
+│  label/*.png     → cv2.imread(gray) → uint8 [0,255]                        │
+│  building/*.png  → cv2.imread(gray) → uint8 [0,255]                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              处理步骤                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  【traj 处理】                                                              │
+│  Step1: np.asarray(np.load(path)) + dtype=float                           │
+│         → float64 [0, 255]                                                 │
+│  Step2: transforms.ToTensor() + .float()                                   │
+│         → torch.Tensor [2, H, W], float32 [0, 1]                           │
+│                                                                             │
+│  【src 处理】                                                               │
+│  Step1: cv2.imread() + np.array(dtype=float)                              │
+│         → float64 [0, 255]                                                 │
+│  Step2: transforms.ToTensor() + .float()                                   │
+│         → torch.Tensor [3, H, W], float32 [0, 1]                           │
+│                                                                             │
+│  【label 处理】                                                             │
+│  Step1: cv2.imread(gray) → uint8 [0, 255]                                  │
+│  Step2: np.expand_dims(label, axis=-1) → (H,W,1)                          │
+│  Step3: transforms.ToTensor() + .float()  【正确】                         │
+│         → torch.Tensor [1, H, W], float32 [0, 1]                           │
+│         unique: [0.0, 1.0]                                                 │
+│                                                                             │
+│  【错误示例 - 不要这样做】                                                  │
+│  Step3: transforms.ToTensor() + .float() / 255.0                          │
+│         → torch.Tensor [1, H, W], float32 [0, 0.004]                       │
+│         unique: [0.0, 0.0039]  ← 错误！会导致 metrics 全 0                  │
+│                                                                             │
+│  【building 处理】 (同 label)                                              │
+│  Step1: cv2.imread(gray) → uint8 [0, 255]                                  │
+│  Step2: np.expand_dims()                                                   │
+│  Step3: transforms.ToTensor() + .float()  【正确】                         │
+│         → torch.Tensor [1, H, W], float32 [0, 1]                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3. 关键点：ToTensor() 的自动转换
+
+`transforms.ToTensor()` 会自动执行：
+1. 将 HWC 转换为 CHW (对于图像)
+2. 将 [0,255] uint8 转换为 [0,1] float
+
+**重要：不需要额外除以 255！**
+
+### 4. 修复记录
+
+| 日期 | 问题 | 修复 |
+|------|------|------|
+| 2026-05-13 | label 经过 `/255` 后值变成 0 或 0.0039，导致 metrics 全 0 | 移除 `/255.0`，直接使用 `ToTensor()` |
+| 2026-05-14 | translator.py中temp张量维度错误导致RuntimeError | 修复 `torch.ones_like(sb_out1[:, :1, :, :])` |
+
+### 5. 数据验证脚本
+
+如需验证数据集是否正确加载，可使用：
+
+```bash
+# 分析单个样本的数据流
+python analyze_data.py
+
+# 完整流水线测试
+python test_pipeline.py
+```
+
+这些脚本会打印：
+- 原始文件的shape、dtype、值范围
+- DataLoader处理后的值
+- 模型输出和Metrics计算结果

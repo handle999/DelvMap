@@ -102,7 +102,8 @@ class DSFNetModel(BaseModel):
         self.optimizer.zero_grad()
         self._backward()
         self.optimizer.step()
-        return self.loss_all, metrics, metrics1, metrics2
+        # 返回: 总loss, metrics, 子loss_Traj, 子loss_Building, 子loss_src_Traj
+        return self.loss_all, metrics, metrics1, metrics2, self.loss_Traj, self.loss_Building, self.loss_src_Traj
 
     def test(self):
         BaseModel.test(self)

@@ -1,6 +1,15 @@
+# Git 忽略文件列表
+
+# 本地 vscode 设置
+.vscode/
+
 # 训练日志
 train_log_GKS/*
 train_log_GKS.zip
+checkpoints/*
+
+# 调试代码
+debug_code/*
 
 # 原始数据
 rawdata/
@@ -23,3 +32,6 @@ adaptive_map_completion/walkway_completion/
 *.py[cod]
 *$py.class
 *.egg-info/
+
+# zip 压缩包
+**/*.zip
