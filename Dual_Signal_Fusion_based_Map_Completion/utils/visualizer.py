@@ -33,40 +33,44 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     ims, txts, links = [], [], []
 
     for label, im_data in visuals.items():
-        im = util.tensor2im(im_data)
+        im = util.tensor2im(im_data) # 此时 im 的 shape 通常是 (H, W, C)
         if im_data is None:
             break
-        if visuals['img'].shape[1] == 1 or visuals['img'].shape[1] == 3:
-            image_name = '%s_%s.png' % (name, label)
-            save_path = os.path.join(image_dir, image_name)
-            print('save path: ', save_path)
-            h, w, _ = im.shape
-            if aspect_ratio > 1.0:
-                # im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
-                im = np.array(Image.fromarray(im).resize((h, int(w * aspect_ratio))))
-            if aspect_ratio < 1.0:
-                # im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
-                im = np.array(Image.fromarray(im).resize((int(h / aspect_ratio), w)))
-            util.save_image(im, save_path)
+            
+        # 获取当前图像的 H, W, 通道数 C
+        if len(im.shape) == 3:
+            h, w, c = im.shape
+        else:
+            h, w = im.shape
+            c = 1 # 如果是二维数组，默认单通道
+            
+        image_name = '%s_%s.png' % (name, label)
+        save_path = os.path.join(image_dir, image_name)
+        print('save path: ', save_path)
 
-        elif visuals['img'].shape[1] == 2:
-            image_name = '%s_%s.png' % (name, label)
-            save_path = os.path.join(image_dir, image_name)
-            print('save path: ', save_path)
-            h, w, _ = im.shape
-            if aspect_ratio > 1.0:
-                # im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
-                im = np.array(Image.fromarray(im).resize((h, int(w * aspect_ratio))))
-            if aspect_ratio < 1.0:
-                # im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
-                im = np.array(Image.fromarray(im).resize((int(h / aspect_ratio), w)))
+        # 处理尺寸缩放
+        if aspect_ratio > 1.0:
+            im = np.array(Image.fromarray(im).resize((h, int(w * aspect_ratio))))
+        elif aspect_ratio < 1.0:
+            im = np.array(Image.fromarray(im).resize((int(h / aspect_ratio), w)))
+
+        # 核心修复：根据当前图像 im 自己的通道数 c 来决定怎么保存
+        if c == 1 or c == 3:
+            util.save_image(im, save_path) # 正常的 RGB 或 单通道 都会正确保存
+        elif c == 2:
+            # 如果某张图恰好是双通道，你再决定怎么存（比如只存第一通道）
             util.save_image2(im[:, :, 0], save_path)
+        elif c > 3:
+            # 如果遇到了 5 通道的图（比如你的拼接 img）
+            # 可以选择只存前3个通道，或者分离开存
+            util.save_image(im[:, :, :3], save_path) 
 
         print(label, im_data.shape, im.shape)
 
         ims.append(image_name)
         txts.append(label)
         links.append(image_name)
+        
     webpage.add_images(ims, txts, links, width=width)
 
 
