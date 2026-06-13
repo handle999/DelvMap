@@ -263,13 +263,33 @@ epoch	1	iter	50	loss_Dice	0.123456	precision	0.8500	recall	0.8200	f1	0.8350	cl_i
 
 ### 4.2 HTML可视化
 
-打开生成的 `web/index.html` 可以看到：
+**单个epoch查看**：打开 `web/index.html` 可以看到结果。
 - 输入轨迹图 (traj)
 - 卫星影像 (src)
 - 真实道路标签 (label)
 - 预测道路 (pred_traj_img)
 - 预测建筑 (pred_building_img)
 - 仅用卫星影像预测的道路 (pred_src_traj_img)
+
+**所有epoch汇总**：运行以下命令生成汇总页面：
+```bash
+python Dual_Signal_Fusion_based_Map_Completion/utils/generate_all_epochs_html.py
+```
+然后打开 `web/all_epochs.html`，包含：
+- 所有172个epoch的完整展示
+- 每行8列：Traj Input, Src Input, GT Road, Pred Road(Traj+Src), Satellite, GT Building, Pred Building, Pred Road(Src Only)
+- 右侧固定导航：支持输入epoch编号快速跳转
+- 链接返回最新epoch页面
+
+**图片文件说明**：
+- `epochXXX_img_1.png`: 输入轨迹图 (traj)
+- `epochXXX_img_2.png`: 输入卫星图 (src)
+- `epochXXX_label.png`: 真实道路标签 (label)
+- `epochXXX_pred_traj_img.png`: 预测道路 (traj+src融合)
+- `epochXXX_src.png`: 卫星影像 (src)
+- `epochXXX_building_label.png`: 建筑标签
+- `epochXXX_pred_building_img.png`: 预测建筑
+- `epochXXX_pred_src_traj_img.png`: 仅用卫星影像预测的道路
 
 ---
 
