@@ -35,3 +35,6 @@ adaptive_map_completion/walkway_completion/
 
 # zip 压缩包
 **/*.zip
+
+# 结果
+results/
