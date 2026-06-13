@@ -73,10 +73,12 @@ class DSFNetModel(BaseModel):
         self.traj_path = input['traj_path']
         self.src_path = input['src_path']
         self.label_path = input['label_path']
+        self.building_label_path = input['building_label_path']
 
         self.img = input['traj_data'].to(self.device)
         self.src = input['src_data'].to(self.device)
         self.label = input['label_data'].to(self.device)
+        self.building_label = input['building_label_data'].to(self.device)
         self.image_paths = [input['traj_path'][0]]
 
     def forward(self):
