@@ -19,6 +19,12 @@ dataset/delvmap_data*/
 dataset/delvmap_data_patches*/
 dataset/xian_*/
 
+# didi_xian 数据集 (从 samroad copy 进来, 自含评估用, 394M 不入 git)
+datasets/didi/xian/
+
+# didi_xian_train DSFNet 训练集 (prepare_didi_trainset.py 生成, 不入 git)
+dataset/didi_xian_train/
+
 # 大图图片
 xian-z18-google-delvmap*.png
 traj*.png
@@ -38,3 +44,10 @@ traj*.png
 
 # 结果
 results/
+
+# 实验产物 (didi 评估、AMC 融合输出等)
+experiments/
+
+# metrics APLS Go 编译产物 (现场编译, 不入 git)
+metrics/apls/eval_bin
+metrics/apls/eval_bin.exe
