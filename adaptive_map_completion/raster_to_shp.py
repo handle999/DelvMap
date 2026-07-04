@@ -168,110 +168,134 @@ def binarize_and_skeletonize(full_pred, bin_thresh=128, close_ksize=3, min_obj=5
 
 
 # ============================================================
-# 4. 骨架 → graph (手写 8-邻接 BFS，零额外依赖)
+# 4. 骨架 → graph (networkx 像素图 + degree-2 链合并，可靠处理交叉/环)
 # ============================================================
-_NB8 = [(-1, -1), (-1, 0), (-1, 1),
-        (0, -1),           (0, 1),
-        (1, -1),  (1, 0),  (1, 1)]
+# 用 8-邻接建图，但对角边加保护：仅当对角相邻两像素没有共同的正交邻居时才连。
+# 纯 4-邻接会切断 45° 斜路的对角像素过渡，把一条连续斜路碎成多段
+# (骨架的 4-连通分量数远大于实际路数)；纯 8-邻接又会在十字/T字交叉处把
+# 正交线的相邻像素通过对角连成虚假高 degree 节点。带保护的 8-邻接兼顾两者：
+# 斜路对角过渡 (无共同正交邻居) 正确连通，交叉处擦肩 (有共同正交邻居) 不误连。
+_NB4 = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+_NB_DIAG = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 
 
-def _neighbors(skel, y, x):
+def _neighbors4(skel, y, x):
     H, W = skel.shape
-    for dy, dx in _NB8:
+    for dy, dx in _NB4:
         ny, nx_ = y + dy, x + dx
         if 0 <= ny < H and 0 <= nx_ < W and skel[ny, nx_]:
             yield ny, nx_
 
 
+def _build_pixel_graph(skel_bool):
+    """每个骨架像素一个节点，带对角保护的 8-邻接建无向图。
+
+    正交方向 (4-邻接) 无条件连；对角方向仅当两端无共同正交邻居时连
+    (有共同正交邻居 = 交叉处擦肩, 不连, 避免虚假拓扑)。
+    """
+    H, W = skel_bool.shape
+    g = nx.Graph()
+    ys, xs = np.where(skel_bool)
+    g.add_nodes_from(zip(ys.tolist(), xs.tolist()))
+    skel = skel_bool  # bool 数组, 索引快
+    for y, x in zip(ys, xs):
+        # 正交邻居
+        ortho_nbrs = []
+        for dy, dx in _NB4:
+            ny, nx_ = y + dy, x + dx
+            if 0 <= ny < H and 0 <= nx_ < W and skel[ny, nx_]:
+                g.add_edge((y, x), (ny, nx_))
+                ortho_nbrs.append((ny, nx_))
+        # 对角邻居: 仅当无共同正交邻居时连
+        ortho_set = set(ortho_nbrs)
+        for dy, dx in _NB_DIAG:
+            ny, nx_ = y + dy, x + dx
+            if 0 <= ny < H and 0 <= nx_ < W and skel[ny, nx_]:
+                # 共同正交邻居 = (ny,x) 和 (y,nx_) 这两个正交位
+                if (ny, x) in ortho_set or (y, nx_) in ortho_set:
+                    continue  # 交叉处擦肩, 不连对角
+                g.add_edge((y, x), (ny, nx_))
+    return g
+
+
 def skeleton_to_graph(skel):
     """
-    返回 list of edges：每条边是像素序列 [(y, x), ...]
-    节点 = 端点 (deg=1) 或 交叉点 (deg>=3)；deg=2 的中间像素不显式建节点。
+    骨架 (HxW bool) → list of edges，每条边是像素序列 [(y, x), ...]。
+    图节点 = 端点 (deg=1) 或 交叉点 (deg>=3)；deg=2 的中间像素被吸收进边。
+    纯环路 (整连通块 deg 全为 2) 会被断成一条闭合边。
+
+    实现：先建带对角保护的 8-邻接像素 networkx 图 (_build_pixel_graph)，
+    再沿 degree-2 链追踪。8-邻接保证斜路对角过渡连通，对角保护避免交叉处
+    虚假拓扑。networkx 保证度数/连通性计算正确，方环不会碎裂。
+    相比手写 BFS，networkx 保证度数/连通性计算正确，交叉点 (deg=4) 不会
+    产生虚假短边，方环不会碎裂。
     """
-    H, W = skel.shape
     skel_bool = skel.astype(bool)
-    # 1. 计算每个 skeleton 像素的 8-邻接度数
-    deg = np.zeros_like(skel_bool, dtype=np.uint8)
-    ys, xs = np.where(skel_bool)
-    for y, x in zip(ys, xs):
-        d = 0
-        for _ in _neighbors(skel_bool, y, x):
-            d += 1
-        deg[y, x] = d
-    is_node = (deg != 2) & skel_bool   # 端点或交叉点
+    pg = _build_pixel_graph(skel_bool)
 
-    # 2. 从每个 node 出发，沿 deg=2 链路追踪边到下一个 node
-    visited_edge_pixels = set()  # frozenset of (y,x) 已被某条边吸收 (deg=2 中间像素)
-    edges = []                   # list of pixel sequences
+    # 1. 图节点 = deg != 2 的骨架像素 (端点 deg=1 / 交叉点 deg>=3)
+    is_node = {p for p, d in pg.degree() if d != 2}
+    # 孤立像素 (deg=0) 丢弃，不产生边
+    is_node = {p for p in is_node if pg.degree(p) >= 1}
 
-    node_coords = list(zip(*np.where(is_node)))
-    for ny, nx_ in tqdm(node_coords, desc='trace edges'):
-        for sy, sx in _neighbors(skel_bool, ny, nx_):
-            # 一条边 (start_node) -> ... -> (end_node)
-            # 但同一对 node 会被两端分别访问到，最后用 frozenset key 去重
-            edge_pixels = [(ny, nx_)]
-            # 若邻居本身就是 node，直接是一条 length-1 的边
-            if is_node[sy, sx]:
-                edge_pixels.append((sy, sx))
-                key = frozenset([(ny, nx_), (sy, sx)])
-                # 用一个集合标记 node-node 短边避免重复
-                if key not in visited_edge_pixels or len(key) == 1:
-                    if key not in visited_edge_pixels:
-                        edges.append(edge_pixels)
-                        visited_edge_pixels.add(key)
+    edges = []
+    walked = set()  # 已被某条边吸收的 deg=2 中间像素
+
+    # 2. 从每个图节点出发，沿 deg=2 链追踪到下一个图节点
+    for start in tqdm(sorted(is_node), desc='trace edges'):
+        for nbr in sorted(pg.neighbors(start)):
+            # 起点邻居本身就是图节点 → length-2 的短边 (start, nbr)
+            if nbr in is_node:
+                ekey = frozenset((start, nbr))
+                if ekey not in walked:
+                    edges.append([start, nbr])
+                    # node-node 短边不占 deg=2 像素，用 frozenset 去重即可
+                    walked.add(ekey)
                 continue
-            # 沿 deg=2 链路追踪
-            prev = (ny, nx_)
-            cur = (sy, sx)
-            edge_pixels.append(cur)
-            while not is_node[cur[0], cur[1]]:
-                # 找到 cur 的两个邻居中不是 prev 的那个
-                nxt = None
-                for ay, ax in _neighbors(skel_bool, cur[0], cur[1]):
-                    if (ay, ax) != prev:
-                        nxt = (ay, ax)
-                        break
-                if nxt is None:
-                    break
-                edge_pixels.append(nxt)
+            # 否则 nbr 是 deg=2 链的入口，沿链走到下一个图节点
+            if nbr in walked:
+                continue
+            chain = [start, nbr]
+            prev, cur = start, nbr
+            while cur not in is_node:
+                # deg=2 像素恰好有两个邻居，取“不是 prev”的那个
+                nxts = [n for n in pg.neighbors(cur) if n != prev]
+                if not nxts:
+                    break  # 悬空 (理论上 deg=2 不会悬空，防御性处理)
+                nxt = nxts[0]
+                chain.append(nxt)
                 prev, cur = cur, nxt
-            # 用两端节点 + 长度 + 中间像素哈希做 key 去重
-            ekey = (edge_pixels[0], edge_pixels[-1], len(edge_pixels))
-            ekey_rev = (edge_pixels[-1], edge_pixels[0], len(edge_pixels))
-            if ekey in visited_edge_pixels or ekey_rev in visited_edge_pixels:
-                continue
-            visited_edge_pixels.add(ekey)
-            edges.append(edge_pixels)
+            # 标记链上所有 deg=2 中间像素已吸收 (不含两端图节点)
+            for p in chain[1:-1]:
+                walked.add(p)
+            edges.append(chain)
 
-    # 3. 处理纯环路 (没有任何 deg!=2 节点的连通块)，否则会被漏掉
-    seen_pix = set()
+    # 3. 纯环路：整连通块 deg 全为 2，没有任何图节点，上面会漏掉。
+    #    从未被吸收的像素出发，沿环走一圈。
+    covered = set()
     for e in edges:
-        for p in e:
-            seen_pix.add(p)
-    for y, x in zip(ys, xs):
-        if (y, x) in seen_pix:
+        covered.update(e)
+    for p in pg.nodes():
+        if p in covered:
             continue
-        # 从这个未覆盖像素 BFS 收集整环
-        ring = [(y, x)]
-        seen_pix.add((y, x))
-        prev = None
-        cur = (y, x)
+        # 找到这个纯环所在的连通块，任取起点断开成一条闭合边
+        ring = [p]
+        covered.add(p)
+        prev, cur = None, p
         while True:
-            nxt = None
-            for ay, ax in _neighbors(skel_bool, cur[0], cur[1]):
-                if (ay, ax) != prev and (ay, ax) not in seen_pix:
-                    nxt = (ay, ax)
-                    break
-            if nxt is None:
+            nxts = [n for n in pg.neighbors(cur) if n != prev and n not in covered]
+            if not nxts:
                 break
+            nxt = nxts[0]
             ring.append(nxt)
-            seen_pix.add(nxt)
+            covered.add(nxt)
             prev, cur = cur, nxt
         if len(ring) >= 3:
             ring.append(ring[0])  # 闭合
             edges.append(ring)
 
-    print(f"[graph] nodes(skeleton-level): {is_node.sum()}, edges: {len(edges)}")
+    print(f"[graph] pixel nodes: {pg.number_of_nodes()}, "
+          f"graph nodes (deg!=2): {len(is_node)}, edges: {len(edges)}")
     return edges
 
 
