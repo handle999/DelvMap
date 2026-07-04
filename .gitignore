@@ -24,8 +24,8 @@ xian-z18-google-delvmap*.png
 traj*.png
 
 # TPTK 工具目录
-adaptive_map_completion/tptk/
-adaptive_map_completion/walkway_completion/
+# adaptive_map_completion/tptk/
+# adaptive_map_completion/walkway_completion/
 
 # Python 缓存
 **/__pycache__/
