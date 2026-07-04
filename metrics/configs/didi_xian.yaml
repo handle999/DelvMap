@@ -1,0 +1,20 @@
+# DiDi Xian (2019_400) metric configuration
+
+# APLS
+apls_interval: 10
+
+# TOPO
+# 400x400 small tiles, same scale as SpaceNet in current metric implementation
+topo_radius: 0.0015
+
+# Test split - read from JSON file
+test_split_file: "datasets/didi/xian/data_split.json"
+
+# Path patterns (relative to project root)
+gt_pattern: "datasets/didi/xian/2019_400/region_{}_graph_gt.pickle"
+pred_pattern: "{dir}/graph/{}.p"
+
+# NOTE:
+# Historical metric scripts used --dataset didi to mean DiDi Xian.
+# New configs and training/inference code use didi_xian explicitly so future
+# datasets (e.g. didi_chengdu) can be added without ambiguity.
