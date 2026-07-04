@@ -18,7 +18,7 @@ def load_img(path, grayscale=False):
 def get_data_loader_multistage(root_dir, mode, batch_size=1):
     """
     Load dataset with train/val/test split support via split_indices.json
-    mode: 'train', 'val', 'test'
+    mode: 'train', 'val', 'test', 'all'
     batch_size: batch size for DataLoader
     """
     dl = data.DataLoader(MultistageDataset(root_dir, mode), shuffle=(mode == 'train'), batch_size=batch_size)
@@ -29,7 +29,7 @@ class MultistageDataset(data.Dataset):
     def __init__(self, data_path, mode='train'):
         """
         data_path: dataset root directory (contains split_indices.json and data subdirs)
-        mode: 'train', 'val', 'test'
+        mode: 'train', 'val', 'test', 'all' ('all' 拼接 train+val+test 用于全量推理)
         """
         super(MultistageDataset, self).__init__()
         self.data_path = data_path
@@ -40,8 +40,16 @@ class MultistageDataset(data.Dataset):
         if os.path.exists(split_file):
             with open(split_file, 'r') as f:
                 split_data = json.load(f)
-            self.selected_indices = split_data.get(mode, [])
-            print(f"[{mode}] Loaded {len(self.selected_indices)} samples from split_indices.json")
+            if mode == 'all':
+                # 'all' 模式：合并 train+val+test，按索引升序排序保证可复现
+                merged = []
+                for k in ('train', 'val', 'test'):
+                    merged.extend(split_data.get(k, []))
+                self.selected_indices = sorted(set(merged))
+                print(f"[{mode}] Loaded {len(self.selected_indices)} samples (train+val+test) from split_indices.json")
+            else:
+                self.selected_indices = split_data.get(mode, [])
+                print(f"[{mode}] Loaded {len(self.selected_indices)} samples from split_indices.json")
         else:
             # Fallback to subdirectory mode
             data_path = os.path.join(data_path, mode)
