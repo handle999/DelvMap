@@ -51,3 +51,4 @@ experiments/
 # metrics APLS Go 编译产物 (现场编译, 不入 git)
 metrics/apls/eval_bin
 metrics/apls/eval_bin.exe
+metrics/apls/apls
