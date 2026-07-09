@@ -51,3 +51,12 @@ experiments/
 # metrics APLS Go 编译产物 (现场编译, 不入 git)
 metrics/apls/eval_bin
 metrics/apls/eval_bin.exe
+metrics/apls/apls
+
+# didi_eval 评测产物 (graph/mask/viz 大文件可重跑, results/ json 指标入库)
+didi_eval_*/graph/
+didi_eval_*/mask/
+didi_eval_*/viz/
+# didi_eval_*/results/ 不忽略 (json 指标入库), 但它被全局 results/ 规则忽略, 需强制取反
+!didi_eval_*/
+!didi_eval_*/results/
